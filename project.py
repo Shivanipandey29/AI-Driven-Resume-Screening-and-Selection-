@@ -7,12 +7,10 @@ from nltk.tokenize import word_tokenize
 
 # Ensure spaCy model is downloaded
 try:
-    spacy.load("en_core_web_sm")
+    nlp = spacy.load("en_core_web_sm")
 except:
     spacy.cli.download("en_core_web_sm")
     nlp = spacy.load("en_core_web_sm")  # Load the model after downloading
-else:
-    nlp = spacy.load("en_core_web_sm")  # Load the model if already downloaded
 
 # Import other necessary packages
 import numpy as np
@@ -20,7 +18,6 @@ from sklearn.metrics.pairwise import cosine_similarity
 import nltk
 from nltk.corpus import stopwords
 import pandas as pd
-import re
 
 nltk.download('stopwords')
 
@@ -86,6 +83,7 @@ def fetch_my_score(resume_text):
             skills.append(skill)
             count += 1
 
+    # Scoring based on skills mentioned
     if count > 20:
         final_score = 9
     elif 15 <= count < 20:
@@ -116,7 +114,6 @@ def text_to_vector(text):
         return sum(word_vectors) / len(word_vectors)
     else:
         return None
-    
     
 def remove_un(text):
     if type(text) == str:
@@ -153,7 +150,7 @@ def calculate_cosine_similarity(vector1, vector2):
         return None
 
 def main():
-    st.title(" AI Driven Resume Screening and Scanning")
+    st.title("AI Driven Resume Screening and Scanning")
 
     uploaded_file = st.file_uploader("Upload your resume (PDF)", type="pdf")
 
