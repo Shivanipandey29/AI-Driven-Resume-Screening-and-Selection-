@@ -2,27 +2,27 @@ import streamlit as st
 from PyPDF2 import PdfReader
 import re
 import spacy
+import spacy.cli
 from nltk.tokenize import word_tokenize
 
-# Load the spaCy English model
-# nlp = spacy.load('en_core_web_sm')
+# Ensure spaCy model is downloaded
+try:
+    spacy.load("en_core_web_sm")
+except:
+    spacy.cli.download("en_core_web_sm")
+    nlp = spacy.load("en_core_web_sm")  # Load the model after downloading
+else:
+    nlp = spacy.load("en_core_web_sm")  # Load the model if already downloaded
 
-import spacy
+# Import other necessary packages
 import numpy as np
 from sklearn.metrics.pairwise import cosine_similarity
 import nltk
 from nltk.corpus import stopwords
-import spacy
-from PyPDF2 import PdfReader
 import pandas as pd
 import re
-import nltk
+
 nltk.download('stopwords')
-
-nlp = spacy.load('en_core_web_sm')
-
-# Load spaCy model
-nlp = spacy.load("en_core_web_md")
 
 stopwords = stopwords.words('english')
 
@@ -187,5 +187,4 @@ def main():
         st.write(f"Similarity: {similarity}")
 
 if __name__ == "__main__":
-    main()     
-
+    main()
