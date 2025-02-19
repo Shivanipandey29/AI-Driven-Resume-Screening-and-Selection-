@@ -2,104 +2,78 @@ import streamlit as st
 from PyPDF2 import PdfReader
 import re
 import spacy
-import spacy.cli
-from nltk.tokenize import word_tokenize
-
-# Ensure spaCy model is downloaded
-try:
-    nlp = spacy.load("en_core_web_sm")
-except:
-    spacy.cli.download("en_core_web_sm")
-    nlp = spacy.load("en_core_web_sm")  # Load the model after downloading
-
-# Import other necessary packages
+import subprocess
 import numpy as np
 from sklearn.metrics.pairwise import cosine_similarity
 import nltk
+from nltk.tokenize import word_tokenize
 from nltk.corpus import stopwords
 import pandas as pd
 
-nltk.download('stopwords')
+# Ensure spaCy model is downloaded dynamically
+def load_spacy_model():
+    try:
+        return spacy.load("en_core_web_sm")
+    except OSError:
+        subprocess.run(["python", "-m", "spacy", "download", "en_core_web_sm"])
+        return spacy.load("en_core_web_sm")
 
-stopwords = stopwords.words('english')
+nlp = load_spacy_model()
+
+# Ensure NLTK stopwords are available
+nltk.download('stopwords')
+try:
+    stopwords_list = set(stopwords.words('english'))
+except:
+    stopwords_list = set()  # Fallback in case of error
 
 def extract_skills_from_resume(text):
-    # Extract Skills
-    skills = extract_skills(text)
-    return skills
+    return extract_skills(text)
 
 def extract_skills(text):
     skills_start = text.find('Skills')
     skills_end = text.find('SKILLS') if text.find('SKILLS') != -1 else len(text)
     skills_text = text[skills_start:skills_end].strip()
 
-    # Process the skills text with spaCy
     doc = nlp(skills_text)
-
-    # Extract lines or sentences containing skill-related information
     skill_sentences = [sent.text.strip() for sent in doc.sents if any(token.pos_ in ['NOUN', 'VERB', 'ADJ'] for token in sent)]
-
-    # Combine the extracted lines into a single string
-    skills = ' '.join(skill_sentences)
-
-    return skills if skills else 'N/A'
+    
+    return ' '.join(skill_sentences) if skill_sentences else 'N/A'
 
 def clean_and_tokenize_skills(skill_string):
     if isinstance(skill_string, str):
-        # Remove '/', '\n', extra spaces
         cleaned_string = re.sub(r'[/\\]+|\n|\s+', ' ', skill_string)
-
-        # Tokenize the skills using nltk's word_tokenize
-        tokenized_skills = word_tokenize(cleaned_string)
-
-        return tokenized_skills
-    else:
-        # Return an empty list if the input is not a string
-        return []
+        return word_tokenize(cleaned_string)
+    return []
 
 def fetch_my_score(resume_text):
     all_skills = extract_skills_from_resume(resume_text)
-    all_skills = "".join(all_skills)
-    cleaned_skills = clean_and_tokenize_skills(all_skills)
+    cleaned_skills = clean_and_tokenize_skills("".join(all_skills).lower())
 
-    new_top_skills = ['algorithms', 'analytical', 'analytical skills', 'analytics', 'artificial intelligence', 'aws',
-                      'azure', 'beautiful soup', 'big data', 'business intelligence', 'c++', 'cloud', 'coding',
-                      'communication', 'computer science', 'computer vision', 'css', 'data analysis', 'data analyst',
-                      'data analytics', 'data collection', 'data management', 'data mining', 'data modeling',
-                      'data quality', 'data science', 'data scientist', 'data structures', 'data visualization',
-                      'deep learning', 'docker', 'excel', 'financial services', 'flask', 'forecasting', 'git', 'hadoop',
-                      'html', 'java', 'javascript', 'keras', 'logistic regression', 'machine learning', 'management',
-                      'matplotlib', 'natural language processing', 'neural networks', 'nlp', 'numpy', 'pandas', 'power bi',
-                      'predictive modeling', 'programming', 'project management', 'python', 'pytorch', 'r', 'react', 'sas',
-                      'scikit', 'scipy', 'seaborn', 'selenium', 'spark', 'sql', 'statistical modeling', 'statistics',
-                      'tableau', 'tensorflow', 'testing', 'web scraping']
+    new_top_skills = [
+        'algorithms', 'analytical', 'analytics', 'artificial intelligence', 'aws',
+        'azure', 'big data', 'business intelligence', 'c++', 'cloud', 'communication',
+        'data analysis', 'data science', 'deep learning', 'docker', 'excel',
+        'machine learning', 'matplotlib', 'natural language processing', 'neural networks',
+        'numpy', 'pandas', 'power bi', 'predictive modeling', 'python', 'scikit-learn',
+        'sql', 'statistics', 'tableau', 'tensorflow'
+    ]
 
-    count = 0
-    skills = []
+    matched_skills = [skill for skill in cleaned_skills if skill in new_top_skills]
+    count = len(matched_skills)
 
-    for skill in cleaned_skills:
-        skill = skill.lower()
-        if skill in new_top_skills:
-            skills.append(skill)
-            count += 1
+    score = (
+        9 if count > 20 else
+        8 if count >= 15 else
+        7 if count >= 10 else
+        6 if count >= 6 else
+        1 if count < 2 else
+        4
+    )
 
-    # Scoring based on skills mentioned
-    if count > 20:
-        final_score = 9
-    elif 15 <= count < 20:
-        final_score = 8
-    elif 10 <= count <= 14:
-        final_score = 7
-    elif 6 <= count <= 9:
-        final_score = 6
-    elif count < 2:
-        final_score = 1
-    else:
-        final_score = 4
+    remaining_skills = [skill for skill in new_top_skills if skill not in matched_skills]
 
-    remaining_skills = [i for i in new_top_skills if i not in skills]
-
-    return final_score, skills, remaining_skills
+    return score, matched_skills, remaining_skills
 
 def preprocess_text(text):
     doc = nlp(text)
@@ -107,81 +81,42 @@ def preprocess_text(text):
 
 def text_to_vector(text):
     words = preprocess_text(text)
-    # Get word vectors for each word
-    word_vectors = [token.vector for token in nlp(" ".join(words))]
-    # Average the word vectors to get the document vector
-    if word_vectors:
-        return sum(word_vectors) / len(word_vectors)
-    else:
-        return None
-    
+    word_vectors = [token.vector for token in nlp(" ".join(words)) if token.has_vector]
+    return sum(word_vectors) / len(word_vectors) if word_vectors else None
+
 def remove_un(text):
-    if type(text) == str:
-        string = []
-        for i in text.split():
-            word = ("".join(e for e in i if e.isalnum()))
-            word = word.lower()
+    if isinstance(text, str):
+        return " ".join(["".join(e for e in word if e.isalnum()).lower() for word in text.split() if word.lower() not in stopwords_list])
+    elif isinstance(text, list):
+        return [" ".join(["".join(e for e in word if e.isalnum()).lower() for word in t.split() if word.lower() not in stopwords_list]) for t in text if isinstance(t, str)]
+    return None
 
-            if word not in stopwords:
-                string.append(word)
-
-        return " ".join(string)
-    elif type(text) == list:
-        result = []
-        for t in text:
-            if type(t) == str:
-                string = []
-                for i in t.split():
-                    word = ("".join(e for e in i if e.isalnum()))
-                    word = word.lower()
-
-                    if word not in stopwords:
-                        string.append(word)
-                result.append(" ".join(string))
-
-        return result
-    else:
-        return None
-    
 def calculate_cosine_similarity(vector1, vector2):
-    if vector1 is not None and vector2 is not None:
-        return cosine_similarity([vector1], [vector2])[0][0]-0.10
-    else:
-        return None
+    return cosine_similarity([vector1], [vector2])[0][0] - 0.10 if vector1 is not None and vector2 is not None else None
 
 def main():
     st.title("AI Driven Resume Screening and Scanning")
 
     uploaded_file = st.file_uploader("Upload your resume (PDF)", type="pdf")
-
     job_description = st.text_area("Enter Job Description")
 
     if uploaded_file is not None:
-        # Read the uploaded PDF file
         with uploaded_file:
-            resume_text = ""
-            pdf_reader = PdfReader(uploaded_file)
-            for page_num in range(len(pdf_reader.pages)):
-                resume_text += pdf_reader.pages[page_num].extract_text()
+            resume_text = "".join([page.extract_text() for page in PdfReader(uploaded_file).pages])
 
-        # Fetch the score and skills
         score, mentioned_skills, not_mentioned_skills = fetch_my_score(resume_text)
 
-        # Display the results
         st.header("Resume Score and Skills")
         st.write(f"Score: {score}")
-        st.write("Skills Mentioned in Resume:")
-        st.write(mentioned_skills)
-        st.write("Skills Not Mentioned in Resume (Recommendations):")
-        st.write(not_mentioned_skills)
+        st.write("Skills Mentioned in Resume:", mentioned_skills)
+        st.write("Skills Not Mentioned in Resume (Recommendations):", not_mentioned_skills)
 
-        # Calculate Similarity
         resume_vector = text_to_vector(remove_un(resume_text))
         job_vector = text_to_vector(remove_un(job_description))
         similarity = calculate_cosine_similarity(resume_vector, job_vector)
 
         st.header("Similarity with Job Description")
-        st.write(f"Similarity: {similarity}")
+        st.write(f"Similarity: {similarity}" if similarity is not None else "Unable to calculate similarity.")
 
 if __name__ == "__main__":
     main()
